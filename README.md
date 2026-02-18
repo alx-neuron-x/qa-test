@@ -72,36 +72,39 @@ The first time a miner is evaluated, its EMA is seeded with the actual score ($\
 
 UID 0 acts as the **baseline reference**. It runs the default model and sets the minimum performance bar. The dynamic improvement barrier adjusts automatically based on where the baseline stands:
 
-$$\text{improvement\\\%} = 10.0 - 9.9 \times \text{baseline}$$
+$$p = 10.0 - 9.9 \times B_0$$
 
-$$\text{required\_score} = \text{baseline} \times \left(1 + \frac{\text{improvement\\\%}}{100}\right)$$
+$$S_{req} = B_0 \times \left(1 + \frac{p}{100}\right)$$
 
-When the baseline is low there is plenty of room for improvement, so the bar is high (up to 10%). As the baseline approaches 1.0 and real gains become harder, the required improvement shrinks to 0.1%. New models (detected by a change in model hash) must exceed this threshold; existing models with the same hash are exempt.
+Where $B_0$ is the baseline (UID 0's EMA), $p$ is the required improvement percentage, and $S_{req}$ is the minimum score to earn rewards. When the baseline is low there is plenty of room for improvement, so the bar is high (up to 10%). As the baseline approaches 1.0 and real gains become harder, the required improvement shrinks to 0.1%. New models (detected by a change in model hash) must exceed this threshold; existing models with the same hash are exempt.
 
 ```
 Score
 1.00 ┤
-     │
-0.90 ┤                                          ╭─── Miner EMA
-     │                                     ╭────╯
-0.80 ┤                                ╭────╯
-     │                          ╭─────╯
-0.70 ┤                     ╭────╯
-     │                ╭────╯
-0.60 ┤           ╭────╯
-     │  · · · · · · · · · · · · · · · · · · · · · · ·  Required Score
-0.55 ┤  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  Baseline (UID 0)
-     │      ╭──╯
-0.40 ┤  ╭───╯
-     │──╯
-0.20 ┤
+     │                                          ╭───  Miner EMA
+0.90 ┤                                     ╭────╯
+     │                                ╭────╯
+0.80 ┤                           ╭────╯
+     │                     ╭─────╯
+0.70 ┤                ╭────╯
+     │           ╭────╯
+0.60 ┤      ╭────╯
+     │  ╭───╯
+0.50 ┤──╯
+     │                           ···················  Required Score
+0.45 ┤                   ·······
+     │           ········  ─────────────────────────  Baseline (UID 0)
+0.35 ┤   ········  ─────────
+     │···  ─────────
+0.25 ┤─────
      │
 0.00 ┤──────────────────────────────────────────────
-     └──┬──────┬──────┬──────┬──────┬──────┬──────┬─→  Rounds
+     └──┬──────┬──────┬──────┬──────┬──────┬──────┬─→
         0     20     40     60     80    100    120
+                              Rounds
 ```
 
-**Reading the chart**: The miner starts with a low EMA that converges upward as consistent scores accumulate ($\alpha = 0.02$, ~100 rounds for 87% convergence). The baseline (UID 0) is relatively stable. The required score sits above the baseline by the dynamic improvement percentage. The miner only starts earning rewards once its EMA crosses above the required score line.
+**Reading the chart**: The miner starts with a low EMA that converges upward as consistent scores accumulate ($\alpha = 0.02$, ~100 rounds for 87% convergence). The baseline (UID 0) also rises over time as better models push the reference score higher. The required score tracks just above the baseline by the dynamic improvement percentage — the gap narrows as the baseline climbs. The miner only starts earning rewards once its EMA crosses above the required score line.
 
 | Baseline | Improvement % | Required Score | Gap |
 |:-:|:-:|:-:|:-:|
