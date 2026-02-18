@@ -126,7 +126,7 @@ Miners that stop serving are tracked round by round. Their EMA decays by 5% per 
 
 ### Validator
 
-The validator needs to run Docker containers for mutation testing and maintain a persistent connection to the Bittensor blockchain. The recommended setup is a VPS or dedicated server with at least 4 CPU cores, 8 GB of RAM, 50 GB of SSD storage, and a stable internet connection. The minimum viable configuration is 2 CPU cores and 4 GB of RAM, though evaluation rounds will be slower. Docker must be installed and the user must have permission to run containers. Ubuntu 22.04+ is the recommended operating system, though any Linux distribution with Docker support will work.
+The validator needs to run Docker containers for mutation testing and maintain a persistent connection to the Bittensor blockchain. The recommended setup is a VPS or dedicated server with at least 4 CPU cores, 8 GB of RAM, 50 GB of SSD storage, and a stable internet connection. The minimum viable configuration is 16 CPU cores and 128 GB of RAM, though evaluation rounds will be slower. Docker must be installed and the user must have permission to run containers. Ubuntu 22.04+ is the recommended operating system, though any Linux distribution with Docker support will work.
 
 ### Miner
 
