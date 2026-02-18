@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="qa-subnet-logo-v2.png" alt="QA-Subnet Logo" width="400">
+</p>
+
 # QA-Subnet: Automated Unit Test Generation on Bittensor
 
 QA-Subnet is a Bittensor subnet dedicated to advancing the state of AI-generated software testing. Miners compete by fine-tuning large language models that write high-quality Python unit tests, while validators evaluate those tests through mutation testing inside secure sandboxes. The result is a decentralized marketplace where models are continuously refined to produce tests that truly verify code correctness, not just pass superficially.
@@ -521,4 +525,4 @@ The reward system uses model hashing and duplicate detection to prevent Sybil at
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
+MIT License.
