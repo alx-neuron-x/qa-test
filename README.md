@@ -24,9 +24,75 @@ QA-Subnet has two roles: **miners** and **validators**.
 
 **Miners** are developers or teams who fine-tune a language model to be excellent at writing Python unit tests. Once the model is ready, the miner uploads it to HuggingFace, deploys it on Chutes.ai so it can serve inference requests, and registers it on the Bittensor blockchain. After registration, the miner's job is done — the process stays running to maintain network presence, but the miner itself does not perform any inference. This is intentional: by having the validator control all inference calls, the network guarantees that the tests were genuinely produced by the registered model.
 
-**Validators** orchestrate the entire evaluation cycle. In each round, the validator generates a Python code challenge (drawn from a library of over 60 templates covering algorithms, data structures, string manipulation, and more). It then selects a batch of miners and verifies that each miner's model is legitimate through a thorough 10-step verification process. For every verified miner, the validator calls that miner's model on Chutes.ai, asking it to produce unit tests for the challenge. The generated tests are first scanned for prohibited patterns (such as code introspection that could game the system), then executed inside a Docker sandbox with no network access, limited CPU, and limited memory. Inside the sandbox, **mutation testing** runs: the code under test is systematically modified (operators swapped, conditions negated, statements deleted) and the tests are re-executed against each mutation. If the tests catch the mutation (i.e., they fail when the bug is introduced), that mutant is considered "killed". The miner's score is the ratio of killed mutants to total mutants.
+**Validators** orchestrate the entire evaluation cycle. In each round, the validator generates a Python code challenge (drawn from a library of 80+ synthetic templates covering algorithms, data structures, caches, graphs, codecs, and more — see [Challenge Generation](#challenge-generation)). It then selects a batch of miners and verifies that each miner's model is legitimate through a thorough 10-step verification process. For every verified miner, the validator calls that miner's model on Chutes.ai, asking it to produce unit tests for the challenge. The generated tests are first scanned for prohibited patterns (such as code introspection that could game the system), then executed inside a Docker sandbox with no network access, limited CPU, and limited memory. Inside the sandbox, **mutation testing** runs: the code under test is systematically modified (operators swapped, conditions negated, statements deleted) and the tests are re-executed against each mutation. If the tests catch the mutation (i.e., they fail when the bug is introduced), that mutant is considered "killed". The miner's score is the ratio of killed mutants to total mutants.
 
 Scores are smoothed using an exponential moving average (EMA) across rounds, and rewards are distributed to the top-performing miners. After each round, the validator sends real-time feedback to every evaluated miner via a ScoreFeedback synapse, so miners can monitor their score, EMA, baseline, required threshold, and rank without external tools. The entire cycle — challenge generation, model verification, inference, sandbox execution, scoring, feedback, and weight setting — happens automatically every round without human intervention.
+
+---
+
+## Challenge Generation
+
+Each round, the validator generates a fresh Python code challenge from a library of 80+ synthetic templates. The code is **not** pulled from open-source repositories — it is generated procedurally with randomized class names, method names, variable names, thresholds, and constants. This ensures that models cannot memorize answers; they must genuinely understand the code to write effective tests.
+
+### Template tiers
+
+| Tier | Examples | Difficulty |
+|---|---|:-:|
+| **Basic** (60 templates) | Classifiers, list processors, validators, string processors, stack/queue, linked list, LRU cache, heap, text index, graph traversal, state machine, expression evaluator, rule engine, codec pair, diff engine, serializer | Low–Medium |
+| **Composition** (10 templates) | Circuit breaker with retry, observable collection, tiered cache (L1/L2), middleware pipeline, connection pool, undo/redo editor, priority router, schema migration engine, resource pool with leases, pub/sub with filters | Medium–High |
+| **God-level** (10 templates) | Dijkstra pathfinder, AVL tree, matrix algebra, physics simulation, polynomial operations, Huffman codec, topological scheduler, LRU/LFU dual cache, regex NFA matcher, expression evaluator with AST | High |
+
+Every template uses randomized naming pools (40 function prefixes × 40 suffixes, 25 class prefixes × 25 suffixes) so the same template produces visually different code each round. God-level and composition templates are further expanded to ~3,000 lines by injecting additional methods that operate on class attributes (numeric computations, list operations, dictionary manipulations).
+
+### Example challenge (simplified)
+
+A typical basic-tier challenge might produce code like this:
+
+```python
+class CacheProcessor:
+    """Least Recently Used cache."""
+
+    def __init__(self, capacity=8):
+        self.capacity = capacity
+        self.store = {}
+        self._order = []
+
+    def fetch(self, key, default=None):
+        """Get value and mark as recently used."""
+        if key not in self.store:
+            return default
+        self._order.remove(key)
+        self._order.append(key)
+        return self.store[key]
+
+    def put(self, key, value):
+        """Insert or update, evict LRU if full."""
+        if key in self.store:
+            self._order.remove(key)
+        elif len(self.store) >= self.capacity:
+            oldest = self._order.pop(0)
+            del self.store[oldest]
+        self.store[key] = value
+        self._order.append(key)
+
+    def remove(self, key):
+        if key not in self.store:
+            return False
+        del self.store[key]
+        self._order.remove(key)
+        return True
+
+    def size(self):
+        return len(self.store)
+
+    def clear(self):
+        count = len(self.store)
+        self.store = {}
+        self._order = []
+        return count
+```
+
+The miner's model must produce pytest tests that **kill as many mutants as possible** — for example, asserting exact return values after `put`/`fetch` sequences, testing eviction when capacity is exceeded, verifying that `remove` returns `False` for missing keys, and checking that `clear` returns the correct count. A test like `assert cache.size() == 0` after `clear()` would kill the mutant where `clear` returns `count + 1` or where `count = len(self.store)` is changed to `count = len(self._order)`.
 
 ---
 
