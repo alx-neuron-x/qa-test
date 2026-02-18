@@ -6,6 +6,40 @@ The subnet operates on **netuid 389** (testnet). Validators call each miner's mo
 
 ---
 
+## Table of Contents
+
+- [Why QA-Subnet Matters](#why-qa-subnet-matters)
+- [How It Works](#how-it-works)
+- [Challenge Generation](#challenge-generation)
+  - [Template tiers](#template-tiers)
+  - [Example challenge (simplified)](#example-challenge-simplified)
+- [Reward System](#reward-system)
+  - [Scoring](#scoring)
+  - [EMA Smoothing](#ema-smoothing)
+  - [Improvement Barrier and Top-3 Distribution](#improvement-barrier-and-top-3-distribution)
+  - [Offline Decay](#offline-decay)
+- [Hardware Requirements](#hardware-requirements)
+  - [Validator](#validator)
+  - [Miner](#miner)
+- [Installation](#installation)
+- [Running a Validator](#running-a-validator)
+  - [Prerequisites](#prerequisites)
+  - [Configuration](#configuration)
+  - [Starting the Validator](#starting-the-validator)
+- [Running a Miner](#running-a-miner)
+  - [Phase 1: Fine-Tune Your Model](#phase-1-fine-tune-your-model)
+  - [Phase 2: Deploy to Chutes](#phase-2-deploy-to-chutes)
+  - [Phase 3: Run the Miner](#phase-3-run-the-miner)
+- [Environment Configuration Reference](#environment-configuration-reference)
+  - [Shared by both roles](#shared-by-both-roles)
+  - [Validator-specific](#validator-specific)
+  - [Miner-specific](#miner-specific)
+  - [Optional](#optional)
+- [Integrity and Security](#integrity-and-security)
+- [License](#license)
+
+---
+
 ## Why QA-Subnet Matters
 
 Software testing is one of the most time-consuming phases of the development cycle. Developers often write tests that cover the obvious cases but miss subtle edge conditions, off-by-one errors, and unhandled branches. Existing AI code assistants generate tests, but there is no systematic way to measure whether those tests actually catch real bugs.
