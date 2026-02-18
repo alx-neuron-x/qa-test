@@ -70,46 +70,38 @@ The first time a miner is evaluated, its EMA is seeded with the actual score ($\
 
 ### Improvement Barrier and Top-3 Distribution
 
-UID 0 acts as the **baseline reference**. It runs the default model and sets the minimum performance bar. The dynamic improvement barrier adjusts automatically based on where the baseline stands:
+The reward system uses two thresholds. **UID 0** runs the default model and sets the **floor** — the minimum score any miner must beat to be considered. The **baseline** tracks the **3rd-ranked miner's EMA** (the entry point to the top 3) and determines the improvement barrier. A new model must beat the current #3, not the #1 — otherwise strong top miners would block all new entries even when the newcomer is better than #3.
 
-$$p = 10.0 - 9.9 \times B_0$$
+$$F_0 = \text{UID 0's EMA (floor)}$$
 
-$$S_{req} = B_0 \times \left(1 + \frac{p}{100}\right)$$
+$$B = \text{3rd-ranked miner's EMA (baseline, or } F_0 \text{ if < 3 miners)}$$
 
-Where $B_0$ is the baseline (UID 0's EMA), $p$ is the required improvement percentage, and $S_{req}$ is the minimum score to earn rewards. When the baseline is low there is plenty of room for improvement, so the bar is high (up to 10%). As the baseline approaches 1.0 and real gains become harder, the required improvement shrinks to 0.1%. New models (detected by a change in model hash) must exceed this threshold; existing models with the same hash are exempt.
+$$p = 10.0 - 9.9 \times B$$
+
+$$S_{req} = B \times \left(1 + \frac{p}{100}\right)$$
+
+Where $F_0$ is the floor (UID 0), $B$ is the baseline (3rd-ranked miner above the floor, or $F_0$ if fewer than 3 exist), $p$ is the required improvement percentage, and $S_{req}$ is the minimum score for new models to earn rewards. When the baseline is low there is plenty of room for improvement, so the bar is high (up to 10%). As the baseline approaches 1.0 and real gains become harder, the required improvement shrinks to 0.1%. New models (detected by a change in model hash) must exceed $S_{req}$; existing models with the same hash are exempt from the barrier but must still beat the floor $F_0$.
 
 ```
 Score
-     │
-0.75 ┤                                                              ╭  Miner EMA
-     │                                                         ╭───╯
-0.70 ┤                                                    ╭────╯
-     │                                               ╭────╯
-0.65 ┤                                          ╭────╯
-     │                                    ╭─────╯
-0.60 ┤                              ──────╯
-     │                        ╭─────
-0.55 ┤                   ╭────╯
-     │              ─────╯
-0.50 ┤        ╭─────
-     │   ╭────╯
-0.45 ┤───╯
-     │                                              ·············  Required Score
-0.40 ┤                                       ·······
-     │                               ········  ─────────────────  Baseline (UID 0)
-0.35 ┤                     ··········  ──────────
-     │             ·········  ──────────
-0.30 ┤     ········  ──────────
-     │·····  ───────
-0.25 ┤──────
-     │
-0.00 ┤──────────────────────────────────────────────────────────────
-     └──┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬─→
-        0     20     40     60     80    100    120    140    160    180  200
-                                        Rounds
+     │                                           M1 ────────── 0.70 (top 1)
+0.70 ┤                                         ╱
+     │                                    ╭───╯   M4 ────────  new miner (0.62)
+0.65 ┤                              ╭────╯      ╱
+     │                        ╭─────╯     ╭────╯  M2 ──────── 0.60 (top 2)
+0.60 ┤                  ╭─────╯     ╭────╯
+     │            ╭─────╯     ╭────╯
+0.55 ┤      ╭─────╯     ─────╯─────────────────── Baseline (top 3 = M3)
+     │╭────╯       ·····························  Required Score
+0.50 ┤╯≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈ UID 0 floor
+     │         M4 must beat M3 + improvement%
+0.00 ┤──────────────────────────────────────────────
+     └──┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬─→
+        0     25     50     75    100    125    150    175  200
+                                  Rounds
 ```
 
-**Reading the chart**: With $\alpha = 0.02$, the EMA moves slowly — it takes ~100 rounds for 87% convergence toward the true score. The miner's EMA does not rise linearly: it plateaus when scores fluctuate (visible flat sections around 0.50 and 0.60) and accelerates when consistent high scores accumulate. The baseline (UID 0) also rises in a staircase pattern as better models push the reference higher, with periods where it flattens. The required score tracks just above the baseline — the gap narrows as the baseline climbs (from ~3% at 0.30 to ~1.5% at 0.40). The miner only starts earning rewards once its EMA crosses above the required score line.
+**Reading the chart**: UID 0 stays around 0.50 (`≈≈≈` floor). The baseline (`───`) tracks the 3rd-ranked miner (M3 at ~0.55), not the top miner (M1 at 0.70). The required score (dots) sits just above the baseline. When M4 enters with a new model, it only needs to beat M3's score + improvement% — not M1's. Since 0.62 > required (~0.577), M4 passes the barrier and displaces M3 from the top 3. All EMAs fluctuate naturally over time as challenges vary in difficulty; rankings are dynamic even without model changes.
 
 | Baseline | Improvement % | Required Score | Gap |
 |:-:|:-:|:-:|:-:|
@@ -119,7 +111,7 @@ Score
 | 0.70 | 3.07% | 0.7215 | +0.021 |
 | 0.90 | 1.09% | 0.9098 | +0.010 |
 
-Only the **top 3 miners** that clear the barrier receive rewards, split as 60% for first place, 30% for second, and 10% for third. Any unclaimed reward slots are absorbed by UID 0. For example, if only one miner surpasses the baseline, that miner receives 60% and UID 0 receives the remaining 40%. If no miner surpasses the baseline, UID 0 receives 100%. This ensures that reward is never distributed to underperforming models and that there is always a strong incentive to beat the reference.
+Only the **top 3 miners** that clear both the floor and the barrier receive rewards, split as 60% for first place, 30% for second, and 10% for third. Any unclaimed reward slots are absorbed by UID 0. For example, if only one miner surpasses the floor, that miner receives 60% and UID 0 receives the remaining 40%. If no miner surpasses the floor, UID 0 receives 100%. Rankings are fully dynamic — miners rise and fall based on their EMA performance each round, even without changing models. The baseline adjusts accordingly, making it easier or harder for new entrants depending on how the current #3 is performing.
 
 ### Offline Decay
 
