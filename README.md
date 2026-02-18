@@ -80,31 +80,36 @@ Where $B_0$ is the baseline (UID 0's EMA), $p$ is the required improvement perce
 
 ```
 Score
-1.00 ┤
-     │                                          ╭───  Miner EMA
-0.90 ┤                                     ╭────╯
-     │                                ╭────╯
-0.80 ┤                           ╭────╯
-     │                     ╭─────╯
-0.70 ┤                ╭────╯
-     │           ╭────╯
-0.60 ┤      ╭────╯
-     │  ╭───╯
-0.50 ┤──╯
-     │                           ···················  Required Score
-0.45 ┤                   ·······
-     │           ········  ─────────────────────────  Baseline (UID 0)
-0.35 ┤   ········  ─────────
-     │···  ─────────
-0.25 ┤─────
      │
-0.00 ┤──────────────────────────────────────────────
-     └──┬──────┬──────┬──────┬──────┬──────┬──────┬─→
-        0     20     40     60     80    100    120
-                              Rounds
+0.75 ┤                                                              ╭  Miner EMA
+     │                                                         ╭───╯
+0.70 ┤                                                    ╭────╯
+     │                                               ╭────╯
+0.65 ┤                                          ╭────╯
+     │                                    ╭─────╯
+0.60 ┤                              ──────╯
+     │                        ╭─────
+0.55 ┤                   ╭────╯
+     │              ─────╯
+0.50 ┤        ╭─────
+     │   ╭────╯
+0.45 ┤───╯
+     │                                              ·············  Required Score
+0.40 ┤                                       ·······
+     │                               ········  ─────────────────  Baseline (UID 0)
+0.35 ┤                     ··········  ──────────
+     │             ·········  ──────────
+0.30 ┤     ········  ──────────
+     │·····  ───────
+0.25 ┤──────
+     │
+0.00 ┤──────────────────────────────────────────────────────────────
+     └──┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬─→
+        0     20     40     60     80    100    120    140    160    180  200
+                                        Rounds
 ```
 
-**Reading the chart**: The miner starts with a low EMA that converges upward as consistent scores accumulate ($\alpha = 0.02$, ~100 rounds for 87% convergence). The baseline (UID 0) also rises over time as better models push the reference score higher. The required score tracks just above the baseline by the dynamic improvement percentage — the gap narrows as the baseline climbs. The miner only starts earning rewards once its EMA crosses above the required score line.
+**Reading the chart**: With $\alpha = 0.02$, the EMA moves slowly — it takes ~100 rounds for 87% convergence toward the true score. The miner's EMA does not rise linearly: it plateaus when scores fluctuate (visible flat sections around 0.50 and 0.60) and accelerates when consistent high scores accumulate. The baseline (UID 0) also rises in a staircase pattern as better models push the reference higher, with periods where it flattens. The required score tracks just above the baseline — the gap narrows as the baseline climbs (from ~3% at 0.30 to ~1.5% at 0.40). The miner only starts earning rewards once its EMA crosses above the required score line.
 
 | Baseline | Improvement % | Required Score | Gap |
 |:-:|:-:|:-:|:-:|
@@ -126,7 +131,7 @@ Miners that stop serving are tracked round by round. Their EMA decays by 5% per 
 
 ### Validator
 
-The validator needs to run Docker containers for mutation testing and maintain a persistent connection to the Bittensor blockchain. The recommended setup is a VPS or dedicated server with at least 4 CPU cores, 8 GB of RAM, 50 GB of SSD storage, and a stable internet connection. The minimum viable configuration is 16 CPU cores and 128 GB of RAM, though evaluation rounds will be slower. Docker must be installed and the user must have permission to run containers. Ubuntu 22.04+ is the recommended operating system, though any Linux distribution with Docker support will work.
+The validator needs to run Docker containers for mutation testing and maintain a persistent connection to the Bittensor blockchain. The recommended setup is a VPS or dedicated server with at least 4 CPU cores, 8 GB of RAM, 50 GB of SSD storage, and a stable internet connection. The minimum viable configuration is 2 CPU cores and 4 GB of RAM, though evaluation rounds will be slower. Docker must be installed and the user must have permission to run containers. Ubuntu 22.04+ is the recommended operating system, though any Linux distribution with Docker support will work.
 
 ### Miner
 
