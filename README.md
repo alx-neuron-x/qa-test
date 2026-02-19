@@ -355,22 +355,6 @@ Specialized challenges targeting common vulnerability patterns: injection flaws,
 
 ---
 
-### Phase 6 — Ecosystem & Governance
-
-#### Decentralized challenge contribution
-
-Open a mechanism for external contributors to submit challenge templates and real-world code packages to the validator's challenge pool. Contributions are reviewed and scored based on how effectively they discriminate between miner models (challenges where all miners score similarly are low-value; challenges that spread scores are high-value). Contributors earn a share of subnet emissions proportional to the quality of their challenges.
-
-#### Subnet governance
-
-Implement on-chain governance for key subnet parameters: mutation operator weights, language priorities, reward distribution ratios, and dataset curation thresholds. Stakeholders (validators, top miners, TAO stakers) vote on parameter changes, ensuring the subnet evolves according to community consensus rather than unilateral decisions.
-
-#### Model marketplace
-
-The top-performing models on the subnet are themselves valuable assets. Phase 6 enables a marketplace where fine-tuned testing models can be licensed directly, with revenue flowing back to the miners who produced them and to the subnet's emission pool. This creates a secondary revenue stream beyond TAO emissions and API fees.
-
----
-
 ## License
 
 MIT License.
