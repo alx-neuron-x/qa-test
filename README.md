@@ -166,11 +166,20 @@ The mutation testing pipeline combines traditional mutations from mutmut (operat
 
 ### EMA Smoothing
 
-Raw scores are not used directly for weight setting. Instead, each miner's score is blended into a running **exponential moving average** with alpha = 0.02. This means each new score contributes only 2% to the moving average, requiring approximately 100 rounds for ~87% convergence. A single outstanding or poor round has minimal long-term impact — consistent performance is what matters.
+Raw scores are not used directly for weight setting. Instead, each miner's score is blended into a running **exponential moving average** that starts from zero and uses a **warmup schedule**:
 
-$$\text{EMA}_t = \alpha \cdot \text{score}_t + (1 - \alpha) \cdot \text{EMA}_{t-1} \qquad \alpha = 0.02$$
+$$\text{EMA}_t = \alpha_t \cdot \text{score}_t + (1 - \alpha_t) \cdot \text{EMA}_{t-1}$$
 
-The first time a miner is evaluated, its EMA is seeded with the actual score ($\text{EMA}_0 = \text{score}_0$) rather than starting from zero, so the baseline and rankings reflect real performance from the first round. If a miner goes offline, its EMA decays by 5% per round ($\text{EMA}_t = 0.95 \cdot \text{EMA}_{t-1}$). After 5 consecutive offline rounds, the EMA is reset to zero so the miner starts fresh when it returns. Miners that time out three consecutive times receive a -0.1 EMA penalty.
+$$\alpha_t = \begin{cases} 0.05 & \text{if evaluations} < 20 \quad \text{(warmup)} \\ 0.02 & \text{otherwise} \quad \text{(stable)} \end{cases}$$
+
+New miners always start from $\text{EMA}_0 = 0$ — there is no seeding with the first score. This prevents a lucky first round from instantly displacing an established miner. Instead, the model must demonstrate **consistent performance** over multiple rounds to climb the rankings. The warmup alpha (0.05) allows faster initial convergence during the first 20 evaluations, then drops to the stable alpha (0.02) for long-term smoothing where each score contributes only 2%.
+
+| Evaluations | Alpha | Convergence | Purpose |
+|:-:|:-:|:-:|---|
+| 1–20 | 0.05 | ~64% in 20 rounds | Fast ramp-up for new miners |
+| 21+ | 0.02 | ~87% in 100 rounds | Stable long-term smoothing |
+
+If a miner goes offline, its EMA decays by 5% per round ($\text{EMA}_t = 0.95 \cdot \text{EMA}_{t-1}$). After 5 consecutive offline rounds, the EMA and evaluation count are reset to zero so the miner starts fresh (including warmup) when it returns. Miners that time out three consecutive times receive a -0.1 EMA penalty.
 
 ### Improvement Barrier and Top-3 Distribution
 
@@ -320,7 +329,7 @@ CHUTES_BASE_URL=https://llm.chutes.ai/v1
 
 UID 0 acts as the baseline reference. It must be running as a real miner with a model deployed on Chutes.ai. The validator reads UID 0's model from on-chain data — there is no hardcoded baseline model. Whatever model UID 0 runs becomes the baseline automatically.
 
-The remaining validator settings (`DOCKER_TIMEOUT`, `INFERENCE_TIMEOUT`) have sensible defaults and typically do not need changes. EMA smoothing (alpha = 0.02) and batch size (up to 10 miners per round) are hardcoded in the validator. See the Environment Configuration Reference below for the full list.
+The remaining validator settings (`DOCKER_TIMEOUT`, `MAX_DOCKER_CONCURRENT`) have sensible defaults and typically do not need changes. EMA smoothing (warmup alpha = 0.05 for first 20 rounds, then stable alpha = 0.02) and batch size (up to 10 miners per round) are hardcoded in the validator. See the [Environment Configuration Reference](#environment-configuration-reference) for the full list.
 
 ### Starting the Validator
 
@@ -475,9 +484,8 @@ CHUTES_BASE_URL=https://llm.chutes.ai/v1                 # Chutes API endpoint
 The validator needs Docker for mutation testing. UID 0 must be running as a real miner — the validator reads its model from on-chain data automatically.
 
 ```env
-DOCKER_TIMEOUT=600                                        # Max seconds per sandbox run
-MUTATION_TESTING_ENABLED=true                             # Enable mutation testing
-INFERENCE_TIMEOUT=600                                     # Max seconds for Chutes API calls per miner
+DOCKER_TIMEOUT=1200                                       # Max seconds per sandbox run (default: 1200)
+# MAX_DOCKER_CONCURRENT=10                                # Max parallel Docker containers (default: 10)
 ```
 
 ### Miner-specific
@@ -496,15 +504,12 @@ AXON_EXTERNAL_PORT=8091                                   # External port (if be
 
 ### Optional
 
-These variables are not required but can be useful for debugging, monitoring, or avoiding rate limits.
+These variables are not required but can be useful for monitoring or avoiding rate limits.
 
 ```env
-LOG_LEVEL=INFO                                            # DEBUG, INFO, WARNING, ERROR
 ENABLE_WANDB=false                                        # Weights & Biases dashboard
 WANDB_API_KEY=                                            # W&B key (wandb.ai/authorize)
 HF_TOKEN=hf_your_token_here                               # HuggingFace token (avoids rate limits)
-MAX_RETRIES=3                                             # API call retry count
-RETRY_DELAY=2                                             # Seconds between retries
 ```
 
 ---
