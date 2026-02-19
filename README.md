@@ -22,24 +22,9 @@ The subnet operates on **netuid 389** (testnet). Validators call each miner's mo
   - [EMA Smoothing](#ema-smoothing)
   - [Improvement Barrier and Top-3 Distribution](#improvement-barrier-and-top-3-distribution)
   - [Offline Decay](#offline-decay)
-- [Hardware Requirements](#hardware-requirements)
-  - [Validator](#validator)
-  - [Miner](#miner)
-- [Installation](#installation)
-- [Running a Validator](#running-a-validator)
-  - [Prerequisites](#prerequisites)
-  - [Configuration](#configuration)
-  - [Starting the Validator](#starting-the-validator)
-- [Running a Miner](#running-a-miner)
-  - [Phase 1: Fine-Tune Your Model](#phase-1-fine-tune-your-model)
-  - [Phase 2: Deploy to Chutes](#phase-2-deploy-to-chutes)
-  - [Phase 3: Run the Miner](#phase-3-run-the-miner)
-- [Environment Configuration Reference](#environment-configuration-reference)
-  - [Shared by both roles](#shared-by-both-roles)
-  - [Validator-specific](#validator-specific)
-  - [Miner-specific](#miner-specific)
-  - [Optional](#optional)
+- [Getting Started](#getting-started)
 - [Integrity and Security](#integrity-and-security)
+- [Roadmap](#roadmap)
 - [License](#license)
 
 ---
@@ -232,285 +217,12 @@ Miners that stop serving are tracked round by round. Their EMA decays by 5% per 
 
 ---
 
-## Hardware Requirements
+## Getting Started
 
-### Validator
+For detailed installation, configuration, and step-by-step instructions, see the dedicated setup guides:
 
-The validator needs to run Docker containers for mutation testing and maintain a persistent connection to the Bittensor blockchain. The recommended setup is a VPS or dedicated server with at least 4 CPU cores, 8 GB of RAM, 50 GB of SSD storage, and a stable internet connection. The minimum viable configuration is 2 CPU cores and 4 GB of RAM, though evaluation rounds will be slower. Docker must be installed and the user must have permission to run containers. Ubuntu 22.04+ is the recommended operating system, though any Linux distribution with Docker support will work.
-
-### Miner
-
-The miner process itself is lightweight since it only maintains a blockchain connection and does not perform inference. A machine with 1 CPU core, 1 GB of RAM, and a stable internet connection is sufficient. The computational cost of the miner is in the fine-tuning phase (done once, before registration) and the Chutes.ai hosting fees for serving the model. Fine-tuning a 7B-parameter model typically requires a GPU with at least 24 GB of VRAM (such as an RTX 3090 or A100) and several hours of training time, depending on the dataset size and training configuration.
-
----
-
-## Installation
-
-Start by cloning the repository and installing the dependencies. Python 3.11 or higher is required.
-
-```bash
-git clone https://github.com/your-org/qa-subnet.git
-cd qa-subnet
-
-python3.11 -m venv .venv
-source .venv/bin/activate
-
-pip install --upgrade pip
-pip install uv
-
-uv pip install -e .
-```
-
-Next, create a Bittensor wallet if you do not already have one. You will need a coldkey (which holds your TAO) and a hotkey (which identifies your miner or validator on-chain).
-
-```bash
-btcli wallet new_coldkey --wallet.name my_wallet
-btcli wallet new_hotkey --wallet.name my_wallet --wallet.hotkey my_hotkey
-```
-
-Register your hotkey on the subnet. This requires a small amount of TAO for the registration fee.
-
-```bash
-btcli subnet register --wallet.name my_wallet --wallet.hotkey my_hotkey --netuid 389 --subtensor.network test
-```
-
-Copy the environment configuration file and edit it with your settings.
-
-```bash
-cp .env .env.backup
-```
-
-The `.env` file controls behavior for both miners and validators. The sections below explain what each role needs to configure.
-
----
-
-## Running a Validator
-
-### Prerequisites
-
-The validator requires Docker to run mutation testing sandboxes. Install Docker following the official instructions for your platform, then build the sandbox image.
-
-```bash
-cd docker
-docker build -t qa-runner -f Dockerfile.runner .
-cd ..
-```
-
-Verify Docker is working.
-
-```bash
-docker run --rm qa-runner echo "Docker is ready"
-```
-
-The validator also needs a Chutes.ai API key because it calls each miner's model directly through the Chutes API. 
-
-If you don't have a chutes.ai account, you can create one with command:
-
-```bash
-chutes register
-```
-and follow the instructions on the terminal. At the end of the registration process don't forget to back up your fingerprint and credentials.
-
-### Configuration
-
-Open the `.env` file and set at minimum these variables:
-
-```env
-# Network (required)
-NETWORK=test
-NETUID=389
-SUBTENSOR_NETWORK=test
-SUBTENSOR_CHAIN_ENDPOINT=wss://test.chain.opentensor.ai:443
-
-# Chutes.ai (required — the validator calls each miner's model via Chutes)
-CHUTES_API_KEY=cpk_your_api_key_here
-CHUTES_BASE_URL=https://llm.chutes.ai/v1
-```
-
-UID 0 acts as the baseline reference. It must be running as a real miner with a model deployed on Chutes.ai. The validator reads UID 0's model from on-chain data — there is no hardcoded baseline model. Whatever model UID 0 runs becomes the baseline automatically.
-
-The remaining validator settings (`DOCKER_TIMEOUT`, `MAX_DOCKER_CONCURRENT`) have sensible defaults and typically do not need changes. EMA smoothing (warmup alpha = 0.05 for first 20 rounds, then stable alpha = 0.02) and batch size (up to 10 miners per round) are hardcoded in the validator. See the [Environment Configuration Reference](#environment-configuration-reference) for the full list.
-
-### Starting the Validator
-
-```bash
-python neurons/validator.py \
-  --netuid 389 \
-  --subtensor.network test \
-  --wallet.name my_wallet \
-  --wallet.hotkey default \
-  --logging.debug
-```
-
-The validator will synchronize the metagraph, begin generating challenges, select miners, verify their models, call their Chutes endpoints, run mutation testing, and update weights. Each round produces detailed logs showing per-miner scores, EMA updates, and weight distributions. For production deployment, use a process manager like `pm2`, `screen` or `systemd` to keep the validator running.
-
-```bash
-pm2 start neurons/validator.py --name qa-validator --interpreter python3 -- \
-  --netuid 389 --subtensor.network test \
-  --wallet.name my_wallet --wallet.hotkey default
-```
-
----
-
-## Running a Miner
-
-Mining on QA-Subnet is a three-phase process: fine-tune a model, deploy it to Chutes, and run the miner process. This section walks through a complete example using a hypothetical miner called `alice` with hotkey `5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY`.
-
-### Phase 1: Fine-Tune Your Model
-
-The goal is to produce a language model that excels at writing Python unit tests that catch mutations. Start with a strong code-generation base model and fine-tune it on a dataset of (code, high-quality-tests) pairs. Focus your training data on tests that cover edge cases, boundary conditions, error paths, and side effects — these are exactly what mutation testing rewards.
-
-Once training is complete, upload the model to HuggingFace. The repository name must follow this naming convention:
-
-```
-{hf_username}/Qa-{description}-{SS58_hotkey}
-```
-
-The prefix can be `Qa`, `qa`, or `QA`. Separators can be dashes `-` or underscores `_`. The last segment must be your miner wallet's full SS58 hotkey address. In our example, alice would name her model:
-
-```
-alice/Qa-my_model-5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY
-```
-
-Other valid formats for the same hotkey:
-
-```
-alice/qa_my_model_5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY
-alice/QA-my_model-5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY
-```
-
-The repository must contain the actual model weight files. The validator downloads and hashes these files to verify model identity and detect duplicates across the network.
-
-### Phase 2: Deploy to Chutes
-
-The deploy script validates the model name, verifies the HuggingFace repo, fetches the revision (commit SHA), deploys to Chutes.ai, and warms up the chute. The on-chain commit is handled by the miner in Phase 3.
-
-**Configure .env.** Set these two variables:
-
-```env
-CHUTES_API_KEY=cpk_your_chutes_api_key_here
-CHUTE_USER=alice
-```
-
-**Run the deployment:**
-
-```bash
-python utils/deploy_model.py \
-  --model-name "alice/Qa-my_model-5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
-```
-
-The script runs four steps:
-
-```
-[1/4] Validating model name...
-[2/4] Verifying HuggingFace...
-  HuggingFace: 12 files, has weights
-  Revision: a3b1c9f2e8d7654321abcdef0123456789abcdef
-[3/4] Deploying to Chutes...
-  Chutes deploy OK
-[4/4] Warming up...
-  Warmup OK
-```
-
-At the end, the script prints the values you need for the miner `.env`. To change GPU config, image, concurrency, or other deployment settings, edit `CHUTE_CONFIG` at the top of `utils/deploy_model.py`.
-
-If you already deployed on Chutes manually and just need to warmup, use `--skip-deploy`:
-
-```bash
-python utils/deploy_model.py \
-  --model-name "alice/Qa-deepseek-coder-v2-5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY" \
-  --skip-deploy
-```
-
-### Phase 3: Run the Miner
-
-With the deployment complete, update the `.env` file with the values from the deploy output:
-
-```env
-MODEL_NAME=alice/Qa-deepseek-coder-v2-5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY
-REVISION=a3b1c9f2e8d7654321abcdef0123456789abcdef
-CHUTE_USER=alice
-CHUTE_ID=a1b2c3d4-e5f6-7890-abcd-ef1234567890
-```
-
-Start the miner:
-
-```bash
-python neurons/miner.py \
-  --netuid 389 \
-  --subtensor.network test \
-  --wallet.name miner_wallet \
-  --wallet.hotkey default \
-  --model-name "alice/Qa-deepseek-coder-v2-5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY" \
-  --revision "a3b1c9f2e8d7654321abcdef0123456789abcdef" \
-  --axon.port 8091
-```
-
-The miner commits JSON data on-chain via `set_reveal_commitment()` and keeps the axon alive. It does not perform inference — the validator calls your model on Chutes directly using the model name. The chute_id is auto-generated from CHUTE_USER + model name if CHUTE_ID is not set. After each evaluation round, the miner receives a ScoreFeedback synapse from the validator with its score, EMA, baseline, required threshold, and rank. Keep the process running so the validator can discover you on the metagraph.
-
-For production, use `pm2` or `systemd` to keep it running persistently:
-
-```bash
-pm2 start neurons/miner.py --name qa-miner --interpreter python3 -- \
-  --netuid 389 --subtensor.network test \
-  --wallet.name miner_wallet --wallet.hotkey default \
-  --model-name "alice/Qa-deepseek-coder-v2-5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY" \
-  --revision "a3b1c9f2e8d7654321abcdef0123456789abcdef" \
-  --axon.port 8091
-```
-
----
-
-## Environment Configuration Reference
-
-Both the miner and validator read from the same `.env` file, but each role uses different variables. The file is organized in sections so you only need to fill in the parts relevant to your role.
-
-### Shared by both roles
-
-Every node on the subnet needs to know which network and netuid to connect to, and both the validator and miner need a Chutes API key (the validator uses it to call miner models for inference; the miner uses it during deployment).
-
-```env
-NETWORK=test                                              # "test" for testnet, "finney" for mainnet
-NETUID=389                                                # Subnet netuid
-SUBTENSOR_NETWORK=test                                    # Subtensor network identifier
-SUBTENSOR_CHAIN_ENDPOINT=wss://test.chain.opentensor.ai:443
-
-CHUTES_API_KEY=cpk_your_key_here                          # Required for both roles
-CHUTES_BASE_URL=https://llm.chutes.ai/v1                 # Chutes API endpoint
-```
-
-### Validator-specific
-
-The validator needs Docker for mutation testing. UID 0 must be running as a real miner — the validator reads its model from on-chain data automatically.
-
-```env
-DOCKER_TIMEOUT=1200                                       # Max seconds per sandbox run (default: 1200)
-# MAX_DOCKER_CONCURRENT=10                                # Max parallel Docker containers (default: 10)
-```
-
-### Miner-specific
-
-The miner needs its model name, revision, and chute identity (all returned by `deploy_model.py`). The model name serves as both the HuggingFace identifier and the Chutes API model. CHUTE_ID is auto-generated from CHUTE_USER + MODEL_NAME if not set explicitly. The axon port is where the validator discovers the miner on the metagraph.
-
-```env
-MODEL_NAME=alice/Qa-deepseek-coder-v2-5Grwva...          # Full HuggingFace model name (= Chutes model)
-REVISION=a3b1c9f2e8d7654321abcdef0123456789abcdef         # HF commit SHA from deploy_model.py
-CHUTE_USER=alice                                          # Your Chutes.ai username
-CHUTE_ID=a1b2c3d4-e5f6-7890-abcd-ef1234567890             # Pre-generated chute ID (auto if CHUTE_USER set)
-AXON_PORT=8091                                            # Axon port (validator discovery)
-AXON_IP=0.0.0.0                                           # Bind address
-AXON_EXTERNAL_PORT=8091                                   # External port (if behind NAT/firewall)
-```
-
-### Optional
-
-These variables are not required but can be useful for monitoring or avoiding rate limits.
-
-```env
-ENABLE_WANDB=false                                        # Weights & Biases dashboard
-WANDB_API_KEY=                                            # W&B key (wandb.ai/authorize)
-HF_TOKEN=hf_your_token_here                               # HuggingFace token (avoids rate limits)
-```
+- **[Validator Setup Guide](docs/validator_setup.md)** — Hardware requirements, Docker setup, configuration, and running the validator.
+- **[Miner Setup Guide](docs/miner_setup.md)** — Model fine-tuning, Chutes deployment, and running the miner.
 
 ---
 
@@ -525,6 +237,137 @@ Generated test code is scanned for prohibited patterns before execution. Any tes
 Mutation testing itself runs inside a hardened Docker sandbox with no network access, restricted CPU and memory, and strict time limits. This prevents any form of external communication or resource abuse during evaluation.
 
 The reward system uses model hashing and duplicate detection to prevent Sybil attacks where the same model is registered under multiple identities. The dynamic improvement barrier ensures that new registrations must demonstrably outperform the baseline, and the top-3 distribution ensures rewards are concentrated on models that genuinely advance test quality rather than being spread thinly across marginal participants.
+
+---
+
+## Roadmap
+
+### Phase 1 — Foundation
+
+**Status: Live.**
+
+The subnet operates with the core loop fully functional.
+
+This phase establishes the fundamental primitive: **a quantifiable, objective metric for test effectiveness** that no other system — centralized or decentralized — currently provides at scale.
+
+**Key deliverables already shipped:**
+- Mutation testing pipeline (mutmut + custom AST engine with 6 advanced mutation types)
+- 10-step model verification and anti-Sybil protections
+- Validator-controlled inference via Chutes.ai
+- Real-time ScoreFeedback synapse for miner monitoring
+- Hardened sandbox execution with no network, limited CPU/memory
+
+---
+
+### Phase 2 — Real-World Code & Dataset as Commodity
+
+Phase 2 transitions from synthetic-only challenges to **real-world code**, and formalizes the subnet's primary digital commodity: a curated, versioned dataset of test effectiveness data.
+
+#### Real-world challenge integration
+
+Synthetic templates remain as a warmup tier, but the challenge pool expands to include functions and classes extracted from real open-source repositories (permissive licenses only: MIT, Apache 2.0, BSD). Validators pull code from a curated registry of repositories, apply the same randomization layer (renamed identifiers, shuffled methods) to prevent memorization, and evaluate miners against code that exists in production. This dramatically increases difficulty and practical relevance — models must handle incomplete documentation, implicit contracts, complex state, and real-world edge cases that synthetic templates cannot fully capture.
+
+#### Open dataset publication
+
+Every evaluation round produces structured data: the source code, the generated tests, per-mutant kill/survive results, and the final mutation score. Phase 2 formalizes this into a **versioned, publicly available dataset** published on HuggingFace:
+
+- **Format**: `(source_code, generated_tests, mutation_results, mutation_score, quality_ratio, language, challenge_tier, model_hash)`
+- **Curation**: only rounds with scores above a configurable quality threshold are included, ensuring the dataset represents genuinely effective tests
+- **Versioning**: monthly snapshots with full provenance (which model produced each entry, which validator evaluated it)
+
+This dataset becomes a standalone digital commodity — a benchmark for test effectiveness that does not exist anywhere today. Researchers training code-aware models, companies building internal testing tools, and other Bittensor subnets can all consume it.
+
+#### Expanded mutation engine
+
+The mutation testing engine adds domain-specific mutation operators targeting patterns common in real-world code: exception handling mutations (swapping exception types, removing try/except blocks), concurrency mutations (removing locks, reordering async operations), and API contract mutations (changing return types, modifying function signatures). This increases the discriminative power of the scoring system and pushes miners toward models that understand deeper program semantics.
+
+---
+
+### Phase 3 — Multi-Language Expansion
+
+Phase 3 extends the subnet beyond Python to cover the most commercially demanded languages in software testing.
+
+#### Language priority
+
+| Priority | Language | Rationale |
+|:-:|---|---|
+| 1 | TypeScript / JavaScript | Largest developer population, massive testing demand in web/fullstack |
+| 2 | Rust | Growing ecosystem, strong type system creates interesting mutation challenges |
+| 3 | Go | Cloud infrastructure language, high demand for reliable testing |
+| 4 | Java / Kotlin | Enterprise dominance, extensive legacy codebases needing test coverage |
+
+Each language requires its own sandbox configuration (runtime, package manager, test runner), mutation operator set, and challenge template library. The scoring formula and reward system remain language-agnostic — mutation score × quality ratio applies universally.
+
+#### Cross-language challenges
+
+Once multiple languages are supported, the subnet introduces cross-language rounds where miners are evaluated on different languages within the same epoch. This rewards models with genuine code understanding over language-specific overfitting, and the resulting dataset captures cross-language test effectiveness patterns.
+
+---
+
+### Phase 4 — Utility Layer & External Demand
+
+Phase 4 creates the **demand side** of the subnet: external consumers who pay for the testing intelligence. This is the phase that transforms QA-Subnet from an internal competition into infrastructure with real economic demand.
+
+#### Public testing API
+
+An API endpoint where any developer or organization can submit code and receive high-quality tests generated by the top-performing model on the subnet. The API uses a credit system. Requests are routed to the current top-ranked miner's model, ensuring consumers always get the best available intelligence.
+
+#### CI/CD integration
+
+A GitHub Action (and GitLab CI equivalent) that integrates directly into pull request workflows:
+
+- On every PR, the action sends changed functions/classes to the QA-Subnet API
+- Tests are generated by the top subnet model and mutation testing is run
+- Results are posted as a PR check: mutation score, uncovered branches, suggested tests
+- Teams can set minimum mutation score thresholds as merge gates
+
+This positions QA-Subnet as a **standard part of the software delivery pipeline**, not an optional tool.
+
+#### IDE plugin
+
+A VS Code extension (with IntelliJ planned) that allows developers to select any function or class and generate mutation-tested unit tests on demand. The plugin calls the subnet API, runs the returned tests locally, and displays mutation coverage inline. This captures the individual developer market alongside the CI/CD enterprise market.
+
+#### Cross-subnet synergy
+
+Code generation subnets on Bittensor produce code — QA-Subnet verifies it. Phase 4 establishes formal integration points:
+
+- Other subnets can submit generated code to QA-Subnet for automated quality scoring
+- The mutation score becomes a **quality signal** that code generation subnets can use in their own reward mechanisms
+- QA-Subnet becomes the verification oracle for code quality across the Bittensor ecosystem
+
+---
+
+### Phase 5 — Advanced Testing Paradigms
+
+Phase 5 expands beyond unit test generation into more sophisticated testing methodologies, each of which opens new markets and produces new categories of training data.
+
+#### Property-based testing
+
+Instead of generating concrete test cases, models generate **properties** — invariants that must hold for any input. This is fundamentally harder than unit testing because the model must reason about the general behavior of code, not specific examples. Properties are evaluated using frameworks like Hypothesis (Python) and fast-check (TypeScript), with mutation testing still serving as the ground truth for property quality.
+
+#### Intelligent fuzzing
+
+AI-guided generation of inputs that maximize branch coverage and expose crashes, hangs, and undefined behavior. The model analyzes code structure and produces targeted inputs rather than random ones. Scoring is based on unique code paths discovered and unique failure modes triggered, measured against a baseline random fuzzer.
+
+#### Security-oriented testing
+
+Specialized challenges targeting common vulnerability patterns: injection flaws, authentication bypasses, race conditions, resource leaks, and insecure defaults. Models generate tests specifically designed to expose security issues. This category produces a security-focused dataset that has direct commercial value for auditing and compliance.
+
+---
+
+### Phase 6 — Ecosystem & Governance
+
+#### Decentralized challenge contribution
+
+Open a mechanism for external contributors to submit challenge templates and real-world code packages to the validator's challenge pool. Contributions are reviewed and scored based on how effectively they discriminate between miner models (challenges where all miners score similarly are low-value; challenges that spread scores are high-value). Contributors earn a share of subnet emissions proportional to the quality of their challenges.
+
+#### Subnet governance
+
+Implement on-chain governance for key subnet parameters: mutation operator weights, language priorities, reward distribution ratios, and dataset curation thresholds. Stakeholders (validators, top miners, TAO stakers) vote on parameter changes, ensuring the subnet evolves according to community consensus rather than unilateral decisions.
+
+#### Model marketplace
+
+The top-performing models on the subnet are themselves valuable assets. Phase 6 enables a marketplace where fine-tuned testing models can be licensed directly, with revenue flowing back to the miners who produced them and to the subnet's emission pool. This creates a secondary revenue stream beyond TAO emissions and API fees.
 
 ---
 
